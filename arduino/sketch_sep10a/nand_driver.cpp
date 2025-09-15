@@ -6,24 +6,15 @@
 #include "nand_commands.h"
 #include "nand_driver.h"
 
-#define CS_PIN 10 // Chip Select pin for the NAND flash
+#define CS_PIN 2 // Chip Select pin for the NAND flash
 
-//currently set to pin 1 on the breakout board
+//from chat testing out
+#define MAX_BLOCKS      2048
+#define PAGES_PER_BLOCK 64
+#define PAGE_SIZE       4352
+#define DATA_SIZE       4096
+#define SPARE_SIZE      256
 
-// A new Lumos board will have a fresh NAND chip (assume 0 or nothing written yet))
-// Most of the time, we will write with a fresh one.
-// However, if we have an interrupted data collection process, we need to resume writing from where we left off. 
-// We initialize a new chip to 0. One that isn't new will have valid data. 
-// Although copilot seems to suggest a bunch of things that won't work, you have to just read and find data. 
-// Otherwise you need more hardware. 
-
-// struct nand_address {
-//     unsigned int column : 13; // bits 12:0
-//     unsigned int page   : 6;  // bits 18:13
-//     unsigned int block  : 11; // bits 28:19
-//     unsigned int        : 2; //dummy bits
-//     //unsigned int        : 2;  // unused, pad to 32 bits
-// };
 
 struct nand_address flashAddr;
 
@@ -185,6 +176,9 @@ void writeBytes(const uint8_t* data, uint16_t length) {
             flashAddr.block++;
         }
     }
+
+
+
     //SPI.transfer(PROGRAM_LOAD_RANDOM_DATA_X1); // Program Load Random Data command
     // SPI.transfer(0b000); // three dummy bits as prescribed in datasheet page 34
     // SPI.transfer(flashAddr.column); // the column

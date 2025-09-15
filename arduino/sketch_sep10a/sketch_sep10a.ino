@@ -1,8 +1,6 @@
-//#include <Arduino.h>
-
 #include "nand_driver.h"
 #include "nand_commands.h"
-//#include "nand_driver.cpp"
+
 
 void setup() {
     Serial.begin(115200);

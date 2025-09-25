@@ -115,7 +115,7 @@ bool erase_block(uint16_t block) {
   csHigh();
   SPI.endTransaction();
 
-  if (!wait_ready(200)) {
+  if (!wait_ready(20)) {
     return false;
   }
   
@@ -124,10 +124,34 @@ bool erase_block(uint16_t block) {
 
 }
 
-void write_bytes(const uint8_t* data, uint16_t length) {
+void program_load(uint16_t col, uint16_t length, const uint8_t* data) {
+  SPI.beginTransaction(nandSpi);
+  csLow();
+  SPI.transfer(PROGRAM_LOAD_1);
+  SPI.transfer((col >> 8) & 0x1F); // first 5 bits (3 dummy)
+  SPI.transfer(col & 0xFF); // low 8 bits
+  for (uint16_t i = 0; i < length; ++i) {
+    SPI.transfer(data[i]);
+  }
+  csHigh();
+  SPI.endTransaction();
+}
+
+void program_execute(uint32_t row) {
+  SPI.beginTransaction(nandSpi);
+  csLow();
+  SPI.transfer(PROGRAM_EXECUTE);
+  SPI.transfer((row >> 16) & 0xFF);
+  SPI.transfer((row >> 8) & 0xFF);
+  SPI.transfer(row & 0xFF);
+  csHigh();
+  SPI.endTransaction();
+}
+
+int write_bytes(const uint8_t* data, uint16_t length) {
 
   if (!data || length == 0) {
-    return;
+    return 0;
   }
 
   const uint16_t col = (flashAddr.column & 0x1FFF);
@@ -143,42 +167,24 @@ void write_bytes(const uint8_t* data, uint16_t length) {
   SPI.endTransaction();
 
   // 2. Program Load
-  SPI.beginTransaction(nandSpi);
-  csLow();
-  SPI.transfer(PROGRAM_LOAD_1);
-  SPI.transfer((col >> 8) & 0x1F); // first 5 bits (3 dummy)
-  SPI.transfer(col & 0xFF); // low 8 bits
-  for (uint16_t i = 0; i < length; ++i) {
-    SPI.transfer(data[i]);
-  }
-  csHigh();
-  SPI.endTransaction();
+  program_load(col, length, data);
 
   // 3. Program execute
-  SPI.beginTransaction(nandSpi);
-  csLow();
-  SPI.transfer(PROGRAM_EXECUTE);
-  SPI.transfer((row >> 16) & 0xFF);
-  SPI.transfer((row >> 8) & 0xFF);
-  SPI.transfer(row & 0xFF);
-
-  csHigh();
-  SPI.endTransaction();
+  program_execute(row);
 
   // 4. Get Feature until OIP=0, then check P_Fail
-  uint8_t sr = 0;
-  const uint32_t t0 = millis();
-  do {
-    sr = get_status();
-    if ((sr & 0x01) == 0) break;
-    delayMicroseconds(200);
-  } while (millis() - t0 < 20);
-
-  get_status();
-  if (sr & 0x08) {
-    Serial.println(F("[PROGRAM] Failed (P_Fail=1). Is the block locked?"));
+  if (!wait_ready(20)) {
+    Serial.println(F("[PROGRAM] Timeout"));
+    return -1;
   }
 
+  uint8_t sr = get_status();
+  if (sr & 0x08) {
+    Serial.println(F("[PROGRAM] Failed (P_Fail=1). Is the block locked?"));
+    return -1;
+  }
+
+  return length;
 }
 
 bool read_bytes(uint8_t *out, uint16_t length) {
@@ -204,7 +210,7 @@ bool read_bytes(uint8_t *out, uint16_t length) {
   csHigh();
   SPI.endTransaction();
 
-  if (!wait_ready(5)) return false;
+  if (!wait_ready(20)) return false;
 
   // 2. Read from cache x1
   SPI.beginTransaction(nandSpi);

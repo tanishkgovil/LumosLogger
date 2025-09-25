@@ -20,11 +20,11 @@ void setup() {
   flashAddr.page = 0;
   flashAddr.column = 0;
 
-  // if (!erase_block(flashAddr.block)) {
-  //   Serial.println(F("[TEST] Erase failed"));
-  // }
+  if (!erase_block(flashAddr.block)) {
+    Serial.println(F("[TEST] Erase failed"));
+  }
   const char msg[] = "NAND OK";
-  // write_bytes((const uint8_t*) msg, (uint16_t) (sizeof(msg) - 1));
+  write_bytes((const uint8_t*) msg, (uint16_t) (sizeof(msg) - 1));
   
 
   uint8_t buf[sizeof(msg)-1] = {0};

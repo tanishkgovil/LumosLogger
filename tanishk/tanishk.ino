@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include "tanishk_driver.h"
+#include "nand_log.h"
 
 void setup() {
   Serial.begin(115200);
@@ -23,7 +24,7 @@ void setup() {
   if (!erase_block(flashAddr.block)) {
     Serial.println(F("[TEST] Erase failed"));
   }
-  const char msg[] = "NAND OK";
+  const char msg[] = "HELLO WORLD";
   write_bytes((const uint8_t*) msg, (uint16_t) (sizeof(msg) - 1));
   
 
@@ -33,7 +34,6 @@ void setup() {
     return;
   }
 
-  // Compare + print results
   bool ok = true;
   for (size_t i=0;i<sizeof(buf);++i) if (buf[i] != (uint8_t)msg[i]) { ok=false; break; }
   Serial.println(ok ? F("[VERIFY] OK") : F("[VERIFY] MISMATCH"));
@@ -47,6 +47,19 @@ void setup() {
   status = get_status();
   print_status(status);
 
+
+  // Use blocks 10..200 as the log region (example)
+  log_begin(10, 200, /*format_if_blank=*/false);
+
+  const char msg2[] = "TEMP=24.8 HR=62";
+  log_append((const uint8_t*)msg2, sizeof(msg2)-1);
+
+  // Later, read them back
+  log_iter_reset();
+  uint8_t buf2[128]; uint16_t n=0;
+  while (log_iter_next(buf2, sizeof(buf2), &n)) {
+    Serial.write(buf2, n); Serial.println();
+  }
 }
 
 void loop() {}

@@ -5,7 +5,7 @@
 
 void loop() {}
 
-void setup() {
+void read() {
   Serial.begin(115200);
   uint32_t t0 = millis();
   while (!Serial && (millis() - t0 < 3000)) { delay(10); }
@@ -89,4 +89,10 @@ void erase() {
   log_begin(10, 20, /*format_if_blank=*/false);
   log_format_range();
   Serial.println(F("Log region erased"));
+}
+
+void setup() {
+  erase();
+  buffer();
+  read();
 }

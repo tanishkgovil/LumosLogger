@@ -46,7 +46,7 @@ static bool is_factory_bad(uint16_t blk) {
 static uint16_t next_good_block(uint16_t blk) {
   uint16_t b = blk;
   while (true) {
-    if (++b > g_endBlk) b = g_startBlk; // wrap within ring
+    if (++b > g_endBlk) return 0; // no wrap - return invalid block
     if (!g_bad[b]) return b;
   }
 }
@@ -65,6 +65,7 @@ static void advance_by(uint32_t n) {
         // move to next good block; erase it for fresh programming
         g_curPage = 0;
         g_curBlk  = next_good_block(g_curBlk);
+        if (g_curBlk == 0) return; // reached end, no wrap
         erase_block(g_curBlk);
       }
     }
@@ -260,7 +261,7 @@ bool log_iter_next(uint8_t* out, uint16_t max_out, uint16_t* out_len) {
   if (it_page >= NAND_PAGES_PER_BLOCK) {
     it_page = 0;
     it_blk++;
-    if (it_blk > g_endBlk) it_blk = g_startBlk;
+    if (it_blk > g_endBlk) return false; // reached end, no wrap
   }
   return true;
 }

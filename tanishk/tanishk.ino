@@ -5,7 +5,7 @@
 
 void loop() {}
 
-void read() {
+void manualread() {
   Serial.begin(115200);
   uint32_t t0 = millis();
   while (!Serial && (millis() - t0 < 3000)) { delay(10); }
@@ -44,41 +44,6 @@ void read() {
   }
 }
 
-void buffer() {
-  // create a log entry that is buffered in parts then flushed
-  Serial.begin(115200);
-  uint32_t t0 = millis();
-  while (!Serial && (millis() - t0 < 3000)) { delay(10); }
-
-  begin();
-
-  // Use blocks 0..20 as the log region (example)
-  log_begin(0, 20, /*format_if_blank=*/false);
-  const uint16_t total_size = 10000; // less than a page
-  uint8_t* payload = new uint8_t[total_size];
-  for (uint16_t i=0;i<total_size;++i) payload[i] = (uint8_t)(i & 0xFF);
-  
-  // append in two parts
-  bool success = log_append(payload, 2500);
-  success = success && log_append(&payload[2500], 2500);
-  success = success && log_append(&payload[5000], 2500);
-  success = success && log_append(&payload[7500], 2500);
-  success = success && log_flush();  // flush buffered data to flash
-  if (success) {
-    Serial.println(F("Log append of buffered payload succeeded"));
-  } else {
-    Serial.println(F("Log append of buffered payload FAILED"));
-  }
-  delete[] payload;
-  
-  // read back the log entry
-  log_iter_reset();
-  uint8_t buf2[128]; uint16_t n=0;
-  while (log_iter_next(buf2, sizeof(buf2), &n)) {
-    Serial.write(buf2, n); Serial.println();
-  }
-}
-
 void erase() {
   Serial.begin(115200);
   uint32_t t0 = millis();
@@ -99,11 +64,45 @@ void test_dummy_data() {
 
   begin();
   log_begin(0, 20, /*format_if_blank=*/false);
-  
+  // format of log data (example line): 415nm,445nm,480nm,515nm,555nm,590nm,630nm,680nm,NIR,Clear,0;
+  // fill with 1000 lines of dummy data
+  const char* line = "415nm,445nm,480nm,515nm,555nm,590nm,630nm,680nm,NIR,Clear,0;";
+  const int line_len = strlen(line);
+  const int total_lines = 1000;
+  for (int i=0;i<total_lines;++i) {
+    Serial.print(F("Appending line ")); Serial.println(i);
+    if (!log_append(reinterpret_cast<const uint8_t*>(line), line_len)) {
+      Serial.print(F("Failed to append line ")); Serial.println(i);
+      break;
+    }
+  }
+
+  if (!log_flush()) {
+    Serial.println(F("Failed to flush log data"));
+  }
+
+  Serial.println(F("Dummy data log append complete"));
+
+  // read back the log entries
+  log_iter_reset();
+  const uint16_t max_record_size = NAND_MAIN_BYTES - sizeof(LogHdr);
+  uint8_t* buf2 = new uint8_t[max_record_size];
+  uint16_t n=0;
+  int record_count = 0;
+  while (log_iter_next(buf2, max_record_size, &n)) {
+    Serial.print(F("Record ")); Serial.print(++record_count);
+    Serial.print(F(" length=")); Serial.print(n);
+    Serial.print(F(": "));
+    for (uint16_t i=0; i < n; ++i) {
+      Serial.print(static_cast<char>(buf2[i]));
+    }
+    Serial.println();
+  }
+  delete[] buf2;
+  Serial.print(F("Total records read: ")); Serial.println(record_count);
 }
 
 void setup() {
   erase();
-  buffer();
-  read();
+  test_dummy_data();
 }

@@ -3,7 +3,7 @@
 #include "nand_commands.h"
 #include "tanishk_driver.h"
 
-#define CS_PIN 2
+#define CS_PIN A1
 
 nand_address flashAddr;
 

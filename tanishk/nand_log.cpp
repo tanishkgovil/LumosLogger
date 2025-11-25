@@ -14,6 +14,11 @@ static bool g_bad[NAND_BLOCK_COUNT];
 // iterator
 static uint16_t it_blk; static uint8_t it_page; static uint16_t it_col;
 
+// buffer for current payload
+static constexpr uint16_t max_payload_len = NAND_MAIN_BYTES - sizeof(LogHdr);
+static uint8_t payload[max_payload_len];
+static uint16_t payload_len = 0;
+
 // ---------- small utilities ----------
 static inline uint16_t crc16_ccitt(const uint8_t* d, uint16_t n) {
   uint16_t c = 0xFFFF;
@@ -169,7 +174,7 @@ bool log_begin(uint16_t start_block, uint16_t end_block, bool format_if_blank) {
   g_nextSeq = maxSeq + 1;
 
   // If we’re starting mid-block on a blank page, ensure block is erased
-  if (!g_bad[g_curBlk]) erase_block(g_curBlk);
+  // if (!g_bad[g_curBlk]) erase_block(g_curBlk);
 
   // Init iterator at oldest page
   it_blk = g_curBlk; it_page = g_curPage; it_col = 0; // will be reset by log_iter_reset()
@@ -179,8 +184,17 @@ bool log_begin(uint16_t start_block, uint16_t end_block, bool format_if_blank) {
 bool log_append(const uint8_t* data, uint16_t len) {
   if (!g_haveRange || !data || len == 0) return false;
 
+  if (payload_len + len <= max_payload_len) {
+    // append to current payload buffer
+    memcpy(&payload[payload_len], data, len);
+    payload_len += len;
+    return true;
+  }
+
+  memcpy(&payload[payload_len], data, max_payload_len - payload_len);
+
   // If record won’t fit in remaining bytes of this page, move to next page
-  if (g_curCol + sizeof(LogHdr) + len > NAND_MAIN_BYTES) {
+  if (g_curCol > 0) {
     // pad remainder (optional: write 0xFF — but NAND already reads as 0xFF when blank)
     g_curCol = 0;
     g_curPage++;
@@ -192,7 +206,7 @@ bool log_append(const uint8_t* data, uint16_t len) {
   }
 
   // Write it
-  bool ok = write_one_page_payload(data, len, g_nextSeq++);
+  bool ok = write_one_page_payload(payload, max_payload_len, g_nextSeq++);
   if (!ok) return false;
 
   // Move to page boundary after record to keep “<= 1 program per page” rule
@@ -203,6 +217,12 @@ bool log_append(const uint8_t* data, uint16_t len) {
     g_curBlk = next_good_block(g_curBlk);
     erase_block(g_curBlk);
   }
+
+  // Reset payload buffer with leftover data
+  uint16_t bytes_copied = max_payload_len - payload_len;
+  payload_len = len - bytes_copied;
+  memcpy(payload, &data[bytes_copied], payload_len);
+
   return true;
 }
 

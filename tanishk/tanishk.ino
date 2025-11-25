@@ -13,7 +13,7 @@ void read() {
   unlock_all_blocks();
   // manually read ascii bytes from log
   Serial.println(F("Manual read of log data:"));
-  for (uint16_t blk=10; blk<=10; ++blk) {
+  for (uint16_t blk=0; blk<=0; ++blk) {
     for (uint8_t page=0; page<5; ++page) {
       flashAddr.block = blk;
       flashAddr.page = page;
@@ -52,8 +52,8 @@ void buffer() {
 
   begin();
 
-  // Use blocks 10..20 as the log region (example)
-  log_begin(10, 20, /*format_if_blank=*/false);
+  // Use blocks 0..20 as the log region (example)
+  log_begin(0, 20, /*format_if_blank=*/false);
   const uint16_t total_size = 10000; // less than a page
   uint8_t* payload = new uint8_t[total_size];
   for (uint16_t i=0;i<total_size;++i) payload[i] = (uint8_t)(i & 0xFF);
@@ -63,6 +63,7 @@ void buffer() {
   success = success && log_append(&payload[2500], 2500);
   success = success && log_append(&payload[5000], 2500);
   success = success && log_append(&payload[7500], 2500);
+  success = success && log_flush();  // flush buffered data to flash
   if (success) {
     Serial.println(F("Log append of buffered payload succeeded"));
   } else {
@@ -85,10 +86,20 @@ void erase() {
 
   begin();
 
-  // Use blocks 10..20 as the log region (example)
-  log_begin(10, 20, /*format_if_blank=*/false);
+  // Use blocks 0..20 as the log region (example)
+  log_begin(0, 20, /*format_if_blank=*/false);
   log_format_range();
   Serial.println(F("Log region erased"));
+}
+
+void test_dummy_data() {
+  Serial.begin(115200);
+  uint32_t t0 = millis();
+  while (!Serial && (millis() - t0 < 3000)) { delay(10); }
+
+  begin();
+  log_begin(0, 20, /*format_if_blank=*/false);
+  
 }
 
 void setup() {

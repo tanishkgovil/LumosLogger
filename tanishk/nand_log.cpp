@@ -227,6 +227,39 @@ bool log_append(const uint8_t* data, uint16_t len) {
   return true;
 }
 
+bool log_flush() {
+  if (!g_haveRange || payload_len == 0) return true;
+
+  // If record won't fit in remaining bytes of this page, move to next page
+  if (g_curCol > 0) {
+    g_curCol = 0;
+    g_curPage++;
+    if (g_curPage >= NAND_PAGES_PER_BLOCK) {
+      g_curPage = 0;
+      g_curBlk = next_good_block(g_curBlk);
+      if (g_curBlk == 0) return false; // reached end
+      erase_block(g_curBlk);
+    }
+  }
+
+  // Write buffered payload
+  bool ok = write_one_page_payload(payload, payload_len, g_nextSeq++);
+  if (!ok) return false;
+
+  // Move to page boundary after record
+  if (g_curCol != 0) { g_curCol = 0; g_curPage++; }
+  if (g_curPage >= NAND_PAGES_PER_BLOCK) {
+    g_curPage = 0;
+    g_curBlk = next_good_block(g_curBlk);
+    if (g_curBlk == 0) return false; // reached end
+    erase_block(g_curBlk);
+  }
+
+  // Clear the buffer
+  payload_len = 0;
+  return true;
+}
+
 void log_iter_reset() {
   // Find oldest page by scanning from start until first non-blank, then that’s head
   for (uint16_t b = g_startBlk; b <= g_endBlk; ++b) {

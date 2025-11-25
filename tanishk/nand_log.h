@@ -28,6 +28,7 @@ struct __attribute__((packed)) LogHdr {
 
 bool log_begin(uint16_t start_block, uint16_t end_block, bool format_if_blank);
 bool log_append(const uint8_t* data, uint16_t len);
+bool log_flush();  // flush any buffered data to flash
 
 // Optional: iterate forward from oldest to newest (after log_begin)
 void log_iter_reset();

@@ -3,7 +3,16 @@
 #include "nand_commands.h"
 #include "tanishk_driver.h"
 
-#define CS_PIN 2
+//IR PD Configuration
+#define IR_PD_PIN A0
+// Storage Chip Configuration
+#define CHIP_SELECT_PIN A1
+// LED Driver Configurations
+#define NUM_TLC5947   1
+#define LED_CLOCK     D2
+#define LED_DATA_PIN  A3
+#define LED_LATCH     D6
+#define LED_BLANK_PIN D7
 
 nand_address flashAddr;
 

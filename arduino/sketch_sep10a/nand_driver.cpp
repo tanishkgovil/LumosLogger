@@ -6,17 +6,57 @@
 #include "nand_commands.h"
 #include "nand_driver.h"
 
-#define CS_PIN 2 // Chip Select pin for the NAND flash
+#define CS_PIN 10 // Chip Select pin for the NAND flash
 
-//from chat testing out
-#define MAX_BLOCKS      2048
-#define PAGES_PER_BLOCK 64
-#define PAGE_SIZE       4352
-#define DATA_SIZE       4096
-#define SPARE_SIZE      256
+//struct nand_address flashAddr;
+struct nand_address flashAddr = {0, 0, 0};
 
+void testBasicSPI() {
+    Serial.println("=== Testing Basic SPI Communication ===");
+    
+    // Test 1: Check if CS pin is working
+    Serial.print("Testing CS pin control... ");
+    digitalWrite(CS_PIN, LOW);
+    delay(1);
+    digitalWrite(CS_PIN, HIGH);
+    Serial.println("CS pin toggled");
+    
+    // Test 2: Try to read with very basic SPI
+    Serial.print("Attempting basic SPI read... ");
+    digitalWrite(CS_PIN, LOW);
+    delayMicroseconds(10);
+    
+    SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+    uint8_t cmd_response = SPI.transfer(0x9F);  // Send READ_ID command
+    uint8_t dummy_response = SPI.transfer(0x00); // Send dummy byte
+    uint8_t id1 = SPI.transfer(0x00);
+    uint8_t id2 = SPI.transfer(0x00);
+    uint8_t id3 = SPI.transfer(0x00);
+    SPI.endTransaction();
+    
+    delayMicroseconds(10);
+    digitalWrite(CS_PIN, HIGH);
+    
+    Serial.print("Raw responses: cmd=0x");
+    Serial.print(cmd_response, HEX);
+    Serial.print(", dummy=0x");
+    Serial.print(dummy_response, HEX);
+    Serial.print(", id1=0x");
+    Serial.print(id1, HEX);
+    Serial.print(", id2=0x");
+    Serial.print(id2, HEX);
+    Serial.print(", id3=0x");
+    Serial.println(id3, HEX);
+    
+    if (id1 == 0x00 && id2 == 0x00 && id3 == 0x00) {
+        Serial.println("ERROR: All zeros - no SPI response!");
+    } else if (id1 == 0xFF && id2 == 0xFF && id3 == 0xFF) {
+        Serial.println("ERROR: All 0xFF - possible floating pins or chip not powered");
+    } else {
+        Serial.println("Got some response - chip may be communicating");
+    }
+}
 
-struct nand_address flashAddr;
 
 bool readPage(uint16_t block, uint8_t page, uint8_t* buffer) {
     // Issue PAGE READ command
@@ -50,96 +90,240 @@ bool readPage(uint16_t block, uint8_t page, uint8_t* buffer) {
     return true;
 }
 
-int find_end_of_data() { //cache read????
-    uint8_t buffer[4352];
-    bool foundData = false;
-    // read blocks/pages/bytes until you find a non-0xFF value. 
-    for(uint16_t block = 0; block < 2048; block++){
+int find_end_of_data() {
+    Serial.println("Quick scan for existing data...");
+    
+    // Only scan first few blocks to find end of data quickly
+    for(uint16_t block = 0; block < 10; block++) { // Limit to first 10 blocks
         for(uint8_t page = 0; page < 64; page++){
-            if(!readPage(block, page, buffer)){
-                continue;
-            }
-
-            bool hasData = false;
-            for(uint16_t i = 0; i < 4096; i++){
-                if(buffer[i] != 0xFF){
-                    hasData = true;
-                    foundData = true;
+            Serial.print("Checking Block ");
+            Serial.print(block);
+            Serial.print(", Page ");
+            Serial.println(page);
+            
+            uint8_t buffer[100]; // Just read first 100 bytes, not full page
+            
+            // Simple read test - don't use full readPage function yet
+            bool isEmpty = true;
+            for(int i = 0; i < 100; i++) {
+                if(buffer[i] != 0xFF) {
+                    isEmpty = false;
                     break;
                 }
             }
-
-            if(!hasData && foundData){
+            
+            if(isEmpty) {
+                // Found empty page, set address here
                 flashAddr.block = block;
                 flashAddr.page = page;
                 flashAddr.column = 0;
+                Serial.println("Found empty space");
                 return 1;
             }
         }
     }
-
-    if(!foundData){
-        flashAddr.block = 0;
-        flashAddr.page = 0;
-        flashAddr.column = 0;
-    }
-    // return the block/page/byte where you found it. 
-    // if you find nothing, return 0,0,0
-    return foundData ? 1: 0; // placeholder
+    
+    // If no empty space found in first 10 blocks, start at beginning
+    flashAddr.block = 0;
+    flashAddr.page = 0;
+    flashAddr.column = 0;
+    return 0;
 }
+
+// int find_end_of_data() { //cache read????
+//     uint8_t buffer[4352];
+//     bool foundData = false;
+//     // read blocks/pages/bytes until you find a non-0xFF value. 
+//     for(uint16_t block = 0; block < 2048; block++){
+//         for(uint8_t page = 0; page < 64; page++){
+//             if(!readPage(block, page, buffer)){
+//                 continue;
+//             }
+
+//             bool hasData = false;
+//             for(uint16_t i = 0; i < 4096; i++){
+//                 if(buffer[i] != 0xFF){
+//                     hasData = true;
+//                     foundData = true;
+//                     break;
+//                 }
+//             }
+
+//             if(!hasData && foundData){
+//                 flashAddr.block = block;
+//                 flashAddr.page = page;
+//                 flashAddr.column = 0;
+//                 return 1;
+//             }
+//         }
+//     }
+
+//     if(!foundData){
+//         flashAddr.block = 0;
+//         flashAddr.page = 0;
+//         flashAddr.column = 0;
+//     }
+//     // return the block/page/byte where you found it. 
+//     // if you find nothing, return 0,0,0
+//     return foundData ? 1: 0; // placeholder
+// }
 
 
 
 // initialize the chip, define chip select pin, start SPI, etc. 
+// bool begin() {
+//     pinMode(CS_PIN, OUTPUT);
+//     digitalWrite(CS_PIN, HIGH); // Should be HIGH to de-select initially
+
+//     SPI.begin();
+//     // This transaction can be started and ended inside specific functions
+//     // that actually transfer data, which is safer.
+//     //SPI.beginTransaction(SPISettings(133000000, MSBFIRST, SPI_MODE0));
+
+//     reset_chip();
+//     return true;
+// }
+
 bool begin() {
+    Serial.println("=== Initializing NAND Flash ===");
+    
     pinMode(CS_PIN, OUTPUT);
-    digitalWrite(CS_PIN, HIGH); // Should be HIGH to de-select initially
-
+    digitalWrite(CS_PIN, HIGH);
+    Serial.println("CS pin configured as output, set HIGH");
+    
     SPI.begin();
-    // This transaction can be started and ended inside specific functions
-    // that actually transfer data, which is safer.
-    //SPI.beginTransaction(SPISettings(133000000, MSBFIRST, SPI_MODE0));
-
+    Serial.println("SPI initialized");
+    
+    delay(100); // Power-up delay
+    Serial.println("Power-up delay complete");
+    
+    // Test basic communication first
+    testBasicSPI();
+    
+    // Try reset with longer delay
+    Serial.println("Attempting chip reset...");
     reset_chip();
-    return true;
+    delay(10); // Wait after reset
+    
+    // Try reading ID after reset
+    Serial.println("Reading ID after reset...");
+    uint8_t id[3];
+    read_ID(id);
+    
+    Serial.print("ID after reset: 0x");
+    Serial.print(id[0], HEX);
+    Serial.print(" 0x");
+    Serial.print(id[1], HEX);
+    Serial.print(" 0x");
+    Serial.println(id[2], HEX);
+    
+    if (id[0] == 0x2C && id[1] == 0x34) {
+        Serial.println("SUCCESS: MT29F4G01ABAFDWB detected!");
+        return true;
+    } else if (id[0] == 0x00 && id[1] == 0x00 && id[2] == 0x00) {
+        Serial.println("ERROR: No communication with chip");
+        return false;
+    } else {
+        Serial.println("WARNING: Unexpected device ID");
+        return false;
+    }
 }
 
+// void send_command(uint8_t command) {
+//     // Pull chip select low to select the flash chip.
+//     digitalWrite(CS_PIN, LOW);
+    
+//     // Send the command
+//     SPI.transfer(command);
+    
+//     // Pull chip select high to deselect the flash chip.
+//     digitalWrite(CS_PIN, HIGH);
+// }
+
 void send_command(uint8_t command) {
-    // Pull chip select low to select the flash chip.
     digitalWrite(CS_PIN, LOW);
-    
-    // Send the command
+    SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
     SPI.transfer(command);
-    
-    // Pull chip select high to deselect the flash chip.
+    SPI.endTransaction();
     digitalWrite(CS_PIN, HIGH);
 }
 
 void reset_chip() {
     digitalWrite(CS_PIN, LOW);
+    delayMicroseconds(10);
+
     SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0)); // Use a safe, slow speed for commands
     SPI.transfer(RESET);
     SPI.endTransaction();
+
+    delayMicroseconds(10);
     digitalWrite(CS_PIN, HIGH);
-    delayMicroseconds(625);
+    //delayMicroseconds(625);
+    delayMicroseconds(2);
 }
 
+// void read_ID(uint8_t* data) {
+//     // Pull chip select low to select the flash chip.
+//     digitalWrite(CS_PIN, LOW);
+//     delayMicroseconds(10);
+
+//     // Send the Read ID command
+//     SPI.transfer(0x9F); // Read ID command
+//     SPI.transfer(0x00); // ADDED THIS LINE 
+    
+//     // Read the ID bytes
+//     for (int i = 0; i < 3; i++) {
+//         data[i] = SPI.transfer(0x00); // Dummy byte to read data
+//     }
+    
+//     // Pull chip select high to deselect the flash chip.
+//     digitalWrite(CS_PIN, HIGH);
+    
+// }
+
+// void read_ID(uint8_t* data) {
+//     Serial.println("Reading device ID...");
+    
+//     digitalWrite(CS_PIN, LOW);
+//     delayMicroseconds(10);
+    
+//     SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+    
+//     uint8_t cmd_resp = SPI.transfer(READ_ID); // 0x9F
+//     Serial.print("ID command response: 0x");
+//     Serial.println(cmd_resp, HEX);
+    
+//     uint8_t dummy_resp = SPI.transfer(0x00); // Dummy byte required by datasheet
+//     Serial.print("Dummy byte response: 0x");
+//     Serial.println(dummy_resp, HEX);
+    
+//     // Read the 3 ID bytes
+//     for (int i = 0; i < 3; i++) {
+//         data[i] = SPI.transfer(0x00);
+//         Serial.print("ID byte ");
+//         Serial.print(i);
+//         Serial.print(": 0x");
+//         Serial.println(data[i], HEX);
+//     }
+    
+//     SPI.endTransaction();
+    
+//     delayMicroseconds(10);
+//     digitalWrite(CS_PIN, HIGH);
+// }
 void read_ID(uint8_t* data) {
-    // Pull chip select low to select the flash chip.
+    SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
     digitalWrite(CS_PIN, LOW);
     
-    // Send the Read ID command
     SPI.transfer(0x9F); // Read ID command
-    SPI.transfer(0x00); // ADDED THIS LINE 
+    SPI.transfer(0x00); // Dummy byte (required by datasheet)
     
-    // Read the ID bytes
     for (int i = 0; i < 3; i++) {
-        data[i] = SPI.transfer(0x00); // Dummy byte to read data
+        data[i] = SPI.transfer(0x00);
     }
     
-    // Pull chip select high to deselect the flash chip.
     digitalWrite(CS_PIN, HIGH);
-    
+    SPI.endTransaction();
 }
 
 void writeBytes(const uint8_t* data, uint16_t length) {

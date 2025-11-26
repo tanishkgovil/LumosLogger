@@ -1,8 +1,3 @@
-#include <Arduino.h>
-#include <SPI.h>
-#include "tanishk_driver.h"
-#include "nand_log.h"
-
 void setup() {
   Serial.begin(115200);
   uint32_t t0 = millis();
@@ -62,4 +57,9 @@ void setup() {
   }
 }
 
-void loop() {}
+void loop() {
+  for (int ch = 0; ch < 24; ch++) {
+    tlc.setPWM(ch, 3000);  // all LEDs at 73% brightness
+}
+tlc.write();
+}

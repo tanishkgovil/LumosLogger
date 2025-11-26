@@ -3,7 +3,18 @@
 #include "nand_commands.h"
 #include "tanishk_driver.h"
 
-#define CS_PIN 2
+// IR PD Configuration
+#define IR_PD_PIN A0
+// Storage Chip Configuration
+#define CHIP_SELECT_PIN A1
+#define CS_PIN          CHIP_SELECT_PIN   // <--- FIX: define CS_PIN used below
+
+// LED Driver Configurations (not used by driver, but ok to leave)
+#define NUM_TLC5947   1
+#define LED_CLOCK     D2
+#define LED_DATA_PIN  A3
+#define LED_LATCH     D6
+#define LED_BLANK_PIN D7
 
 nand_address flashAddr;
 
@@ -121,7 +132,6 @@ bool erase_block(uint16_t block) {
   
   uint8_t sr = get_status();
   return (sr & 0x04) == 0;
-
 }
 
 void program_load(uint16_t col, uint16_t length, const uint8_t* data) {
@@ -129,7 +139,7 @@ void program_load(uint16_t col, uint16_t length, const uint8_t* data) {
   csLow();
   SPI.transfer(PROGRAM_LOAD_1);
   SPI.transfer((col >> 8) & 0x1F); // first 5 bits (3 dummy)
-  SPI.transfer(col & 0xFF); // low 8 bits
+  SPI.transfer(col & 0xFF);        // low 8 bits
   for (uint16_t i = 0; i < length; ++i) {
     SPI.transfer(data[i]);
   }
@@ -226,6 +236,4 @@ bool read_bytes(uint8_t *out, uint16_t length) {
   csHigh();
   SPI.endTransaction();
   return true;
-
 }
-

@@ -3,16 +3,7 @@
 #include "nand_commands.h"
 #include "tanishk_driver.h"
 
-//IR PD Configuration
-#define IR_PD_PIN A0
-// Storage Chip Configuration
-#define CHIP_SELECT_PIN A1
-// LED Driver Configurations
-#define NUM_TLC5947   1
-#define LED_CLOCK     D2
-#define LED_DATA_PIN  A3
-#define LED_LATCH     D6
-#define LED_BLANK_PIN D7
+#define CS_PIN A1
 
 nand_address flashAddr;
 
@@ -237,4 +228,3 @@ bool read_bytes(uint8_t *out, uint16_t length) {
   return true;
 
 }
-

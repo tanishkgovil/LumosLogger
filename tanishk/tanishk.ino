@@ -107,7 +107,6 @@
 //   test_dummy_data();
 // }
 
-
 #include <Arduino.h>
 #include <Wire.h>
 #include <SPI.h>
@@ -118,13 +117,13 @@
 #include "tanishk_driver.h"   // low-level NAND driver: begin, read_ID, get_status, etc.
 #include "nand_log.h"         // high-level logging: log_begin, log_append, log_iter_next
 
-// ================== TLC5947 CONFIG (MATCHES WORKING TEST) ==================
+// ================== TLC5947 CONFIG ==================
 #define NUM_TLC5947  1
 #define DATA_PIN     A3      // Data pin for LED driver
 #define CLOCK_PIN    D2      // Clock pin for LED driver
 #define LATCH_PIN    D6      // Latch pin for LED driver
 
-// Constructor (matches your known-working sketch: clock, data, latch)
+// Constructor (clock, data, latch)
 Adafruit_TLC5947 tlc = Adafruit_TLC5947(NUM_TLC5947, CLOCK_PIN, DATA_PIN, LATCH_PIN);
 
 // We will use TLC channels 0..17 (inclusive)
@@ -132,7 +131,7 @@ const int numLEDs = 18;      // LED channels 0–17
 
 // ================== NAND LOG REGION CONFIG ==================
 const uint16_t LOG_START_BLOCK = 10;
-const uint16_t LOG_END_BLOCK   = 199;   // 190 blocks total (ring region)
+const uint16_t LOG_END_BLOCK   = 10;
 
 // ================== AS7341 CONFIG ==================
 Adafruit_AS7341 as7341;
@@ -150,10 +149,8 @@ int stabTime        = 1000;  // ms LED on before reading sensor
 int delayTime       = 5;     // small extra delay after reading
 
 // ================== LOGGING / BATCHING STATE ==================
-#define BATCH_WRITE_SIZE 16
-String   strBatched   = "";
-uint8_t  numBatched   = 0;
-bool     readyForLoop = false;
+bool readyForLoop = false;
+int totalLogged = 0;
 
 // ================== HELPERS ==================
 
@@ -164,8 +161,8 @@ void clearAllLEDs() {
   tlc.write();
 }
 
-// Combine one AS7341 reading into CSV: "r0,r1,...,r9\n"
-String combineData() {
+// Combine one AS7341 reading into CSV: "r0,r1,...,r9;"
+String combineData(int led) {
   String pddata = "";
   for (int i = 0; i < pdVisNum; i++) {
     pddata += String(readings[i]);
@@ -173,20 +170,18 @@ String combineData() {
       pddata += ",";
     }
   }
-  return pddata + "\n";
+  pddata += ",";
+  pddata += led;
+  return pddata + ";";
 }
 
 // ================== SETUP ==================
-#include <Arduino.h>
-#include <SPI.h>
-#include "tanishk_driver.h"
-#include "nand_log.h"
-// >>>>>>> 2d865d63e86ea5c23b085de60ee4fc40cafec81d
 
 void setup() {
   Serial.begin(115200);
   uint32_t t0 = millis();
-//<<<<<<< HEAD
+
+  // Wait a bit for Serial (for boards with native USB)
   while (!Serial && (millis() - t0 < 3000)) {
     delay(10);
   }
@@ -215,7 +210,7 @@ void setup() {
 
   // --- Log layer init over blocks [10..199] ---
   // NOTE: format_if_blank = true will erase this region at startup.
-  if (!log_begin(LOG_START_BLOCK, LOG_END_BLOCK, /*format_if_blank=*/true)) {
+  if (!log_begin(LOG_START_BLOCK, LOG_END_BLOCK, /*format_if_blank=*/false)) {
     Serial.println(F("log_begin failed!"));
     while (1) {
       delay(1000);
@@ -227,7 +222,7 @@ void setup() {
   Serial.print(F(".."));
   Serial.println(LOG_END_BLOCK);
 
-  // --- TLC5947 init (exactly as in your working test) ---
+  // --- TLC5947 init ---
   tlc.begin();
   clearAllLEDs();
   Serial.println(F("TLC5947 initialized."));
@@ -310,100 +305,71 @@ void loop() {
     tlc.write();
 
     // Build CSV line and print
-    String pdData = combineData();
+    String pdData = combineData(led);
     Serial.print(F("PD Data (LED "));
     Serial.print(led);
     Serial.print(F("): "));
     Serial.print(pdData);    // already includes newline
 
-    // Add to batch string
-    strBatched += pdData;
-    numBatched++;
 
     // When batch is full, append to NAND log
-    if (numBatched >= BATCH_WRITE_SIZE) {
-      size_t length = strBatched.length();
+    size_t length = pdData.length();
+    totalLogged += length;
+    
+    Serial.print(length);
+    Serial.println(F(" bytes. Logging to NAND..."));
 
-      Serial.print(F("\nBatch full: "));
-      Serial.print(numBatched);
-      Serial.print(F(" records, "));
-      Serial.print(length);
-      Serial.println(F(" bytes. Logging to NAND..."));
+    Serial.print(F("Total logged so far: "));
+    Serial.print(totalLogged);
+    Serial.println(F(" bytes"));
 
-      bool ok = log_append(
-        reinterpret_cast<const uint8_t*>(strBatched.c_str()),
-        static_cast<uint16_t>(length)
-      );
+    bool ok = log_append(
+      reinterpret_cast<const uint8_t*>(pdData.c_str()),
+      static_cast<uint16_t>(length)
+    );
 
-      if (!ok) {
-        Serial.println(F("log_append FAILED!"));
-      } else {
-        Serial.println(F("log_append OK."));
-      }
+    if (!ok) {
+      Serial.println(F("log_append FAILED!"));
+    } else {
+      Serial.println(F("log_append OK."));
+    }
 
-      // Reset batch
-      strBatched = "";
-      numBatched = 0;
-
-      Serial.println(F("Continuing continuous logging...\n"));
-    } // end batch check
+    Serial.println(F("Continuing continuous logging...\n"));
   }   // end for each LED 0..17
 }
+
+void readback() {
+  Serial.begin(115200);
+  uint32_t t0 = millis();
   while (!Serial && (millis() - t0 < 3000)) { delay(10); }
 
   begin();
+  log_begin(LOG_START_BLOCK, LOG_END_BLOCK, /*format_if_blank=*/false);
+  // format of log data (example line): 65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,4095,16;
+  // fill with 1000 lines of dummy data
 
-  uint8_t mfg = 0, dev = 0;
-  read_ID(mfg, dev);
-  Serial.print(F("ID: MFG=0x")); Serial.print(mfg, HEX);
-  Serial.print(F(" DEV=0x"));     Serial.println(dev, HEX);
-  uint8_t status = get_status();
-  print_status(status);
-
-  flashAddr.block = 10;
-  flashAddr.page = 0;
-  flashAddr.column = 0;
-
-  if (!erase_block(flashAddr.block)) {
-    Serial.println(F("[TEST] Erase failed"));
-  }
-  const char msg[] = "HELLO WORLD";
-  write_bytes((const uint8_t*) msg, (uint16_t) (sizeof(msg) - 1));
-  
-
-  uint8_t buf[sizeof(msg)-1] = {0};
-  if (!read_bytes(buf, sizeof(buf))) {
-    Serial.println(F("[TEST] Read failed"));
-    return;
-  }
-
-  bool ok = true;
-  for (size_t i=0;i<sizeof(buf);++i) if (buf[i] != (uint8_t)msg[i]) { ok=false; break; }
-  Serial.println(ok ? F("[VERIFY] OK") : F("[VERIFY] MISMATCH"));
-
-  Serial.print(F("HEX: "));
-  for (uint8_t b: buf) { if (b<16) Serial.print('0'); Serial.print(b, HEX); Serial.print(' '); }
-  Serial.print(F(" | ASCII: "));
-  for (uint8_t b: buf) Serial.print((char)b);
-  Serial.println();
-
-  status = get_status();
-  print_status(status);
-
-
-  // Use blocks 10..200 as the log region (example)
-  log_begin(10, 200, /*format_if_blank=*/false);
-
-  const char msg2[] = "TEMP=24.8 HR=62";
-  log_append((const uint8_t*)msg2, sizeof(msg2)-1);
-
-  // Later, read them back
+  // read back the log entries
   log_iter_reset();
-  uint8_t buf2[128]; uint16_t n=0;
-  while (log_iter_next(buf2, sizeof(buf2), &n)) {
-    Serial.write(buf2, n); Serial.println();
+  const uint16_t max_record_size = NAND_MAIN_BYTES - sizeof(LogHdr);
+  uint8_t* buf2 = new uint8_t[max_record_size];
+  uint16_t n=0;
+  int record_count = 0;
+  while (log_iter_next(buf2, max_record_size, &n)) {
+    Serial.print(F("Record ")); Serial.print(++record_count);
+    Serial.print(F(" length=")); Serial.print(n);
+    Serial.print(F(": "));
+    for (uint16_t i=0; i < n; ++i) {
+      Serial.print(static_cast<char>(buf2[i]));
+    }
+    Serial.println();
   }
+  delete[] buf2;
+  Serial.print(F("Total records read: ")); Serial.println(record_count);
 }
 
-void loop() {}
-//>>>>>>> 2d865d63e86ea5c23b085de60ee4fc40cafec81d
+void eraseall() {
+  begin();
+  for (uint16_t b = 0; b < NAND_BLOCK_COUNT; ++b) {
+    erase_block(b);
+  }
+}

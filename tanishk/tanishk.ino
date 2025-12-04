@@ -130,8 +130,8 @@ Adafruit_TLC5947 tlc = Adafruit_TLC5947(NUM_TLC5947, CLOCK_PIN, DATA_PIN, LATCH_
 const int numLEDs = 18;      // LED channels 0–17
 
 // ================== NAND LOG REGION CONFIG ==================
-const uint16_t LOG_START_BLOCK = 10;
-const uint16_t LOG_END_BLOCK   = 10;
+const uint16_t LOG_START_BLOCK = 11;
+const uint16_t LOG_END_BLOCK   = 11;
 
 // ================== AS7341 CONFIG ==================
 Adafruit_AS7341 as7341;
@@ -151,6 +151,8 @@ int delayTime       = 5;     // small extra delay after reading
 // ================== LOGGING / BATCHING STATE ==================
 bool readyForLoop = false;
 int totalLogged = 0;
+unsigned long startTime = 0;
+unsigned long endTime = 0;
 
 // ================== HELPERS ==================
 
@@ -259,6 +261,8 @@ void setup() {
 
   readyForLoop = true;
   Serial.println(F("Setup complete. Entering continuous logging loop.\n"));
+  // print current time
+  startTime = millis();
 }
 
 // ================== LOOP ==================
@@ -328,7 +332,12 @@ void loop() {
     );
 
     if (!ok) {
-      Serial.println(F("log_append FAILED!"));
+      Serial.println(F("log_append FAILED! Stopping logging."));
+      readyForLoop = false;
+      endTime = millis();
+      Serial.print(F("Total duration (ms): "));
+      Serial.println(endTime - startTime);
+      break;
     } else {
       Serial.println(F("log_append OK."));
     }

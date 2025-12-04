@@ -20,8 +20,8 @@ Adafruit_TLC5947 tlc = Adafruit_TLC5947(NUM_TLC5947, CLOCK_PIN, DATA_PIN, LATCH_
 const int numLEDs = 18;      // LED channels 0–17
 
 // ================== LOGGING CONFIG ==================
-const uint16_t LOG_START_BLOCK = 11;
-const uint16_t LOG_END_BLOCK   = 11;
+const uint16_t LOG_START_BLOCK = 0;
+const uint16_t LOG_END_BLOCK   = NAND_BLOCK_COUNT - 1;
 
 // ================== AS7341 CONFIG ==================
 Adafruit_AS7341 as7341;
@@ -68,7 +68,7 @@ String combineData(int led) {
 
 // ================== SETUP ==================
 
-void actualsetup() {
+void setup() {
   Serial.begin(115200);
   uint32_t t0 = millis();
 
@@ -231,7 +231,7 @@ void loop() {
   }
 }
 
-void setup() {
+void readback() {
   Serial.begin(115200);
   uint32_t t0 = millis();
   while (!Serial && (millis() - t0 < 3000)) { delay(10); }

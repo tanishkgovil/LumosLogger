@@ -142,6 +142,8 @@ static bool read_hdr_at(uint16_t blk, uint8_t page, uint16_t col, LogHdr& out) {
 // Initialize logging over given block range (inclusive); optionally format if blank
 bool log_begin(uint16_t start_block, uint16_t end_block, bool format_if_blank) {
   if (start_block > end_block) return false;
+  if (end_block >= NAND_BLOCK_COUNT || start_block >= NAND_BLOCK_COUNT) return false;
+  if (start_block < 0 || end_block < 0) return false;
   g_startBlk = start_block;
   g_endBlk   = end_block;
   g_haveRange = true;

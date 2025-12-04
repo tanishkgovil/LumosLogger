@@ -7,6 +7,7 @@ static uint8_t  g_curPage;
 static uint16_t g_curCol;
 static uint32_t g_nextSeq;
 static bool     g_haveRange = false;
+static bool     g_logFull = false;             // true when log is full
 
 // simple BBT; true means "bad"
 static bool g_bad[NAND_BLOCK_COUNT];
@@ -46,12 +47,21 @@ static bool is_factory_bad(uint16_t blk) {
 static uint16_t next_good_block(uint16_t blk) {
   uint16_t b = blk;
   while (true) {
-    if (++b > g_endBlk) return 0; // no wrap - return invalid block
+    if (++b > g_endBlk) { g_logFull = true; return blk; } // no wrap - set full flag and return current
     if (!g_bad[b]) return b;
   }
 }
 
+// Returns true if page looks unused (first two bytes 0xFF)
+static bool page_is_blank(uint16_t blk, uint8_t page) {
+  uint8_t probe[2] = {0};
+  set_addr(blk, page, 0);
+  if (!read_bytes(probe, 2)) return false;
+  return (probe[0] == 0xFF && probe[1] == 0xFF);
+}
+
 static void advance_by(uint32_t n) {
+  if (g_logFull) return;
   // Advance cursor across column -> page -> block (skips bad)
   while (n > 0) {
     uint32_t rem = NAND_MAIN_BYTES - g_curCol;
@@ -64,9 +74,10 @@ static void advance_by(uint32_t n) {
       if (g_curPage >= NAND_PAGES_PER_BLOCK) {
         // move to next good block; erase it for fresh programming
         g_curPage = 0;
-        g_curBlk  = next_good_block(g_curBlk);
-        if (g_curBlk == 0) return; // reached end, no wrap
-        erase_block(g_curBlk);
+        g_curBlk = next_good_block(g_curBlk);
+        if (g_logFull) return; // reached end, no wrap
+        // Only erase if not already blank
+        if (!page_is_blank(g_curBlk, 0)) erase_block(g_curBlk);
       }
     }
   }
@@ -74,15 +85,8 @@ static void advance_by(uint32_t n) {
 
 static void cursor_to_flash() { set_addr(g_curBlk, g_curPage, g_curCol); }
 
-// Returns true if page looks unused (first two bytes 0xFF)
-static bool page_is_blank(uint16_t blk, uint8_t page) {
-  uint8_t probe[2] = {0};
-  set_addr(blk, page, 0);
-  if (!read_bytes(probe, 2)) return false;
-  return (probe[0] == 0xFF && probe[1] == 0xFF);
-}
-
 static bool write_one_page_payload(const uint8_t* buf, uint16_t len, uint32_t seq) {
+  if (g_logFull) return false;
   // We write: [LogHdr][payload] in a single program operation (<= main bytes)
   LogHdr h;
   h.magic   = 0xA55A;
@@ -165,13 +169,17 @@ bool log_begin(uint16_t start_block, uint16_t end_block, bool format_if_blank) {
   }
 
   if (!found_tip) {
-    // Range completely full; start at beginning (ring) and overwrite
-    tipBlk = g_startBlk; tipPage = 0;
+    // Range completely full; mark as full (no wrap)
+    g_logFull = true;
+    g_curBlk = g_endBlk;
+    g_curPage = NAND_PAGES_PER_BLOCK - 1;
+    g_curCol = 0;
+  } else {
+    g_logFull = false;
+    g_curBlk = tipBlk;
+    g_curPage = tipPage;
+    g_curCol = 0;
   }
-
-  g_curBlk = tipBlk;
-  g_curPage = tipPage;
-  g_curCol = 0;
   g_nextSeq = maxSeq + 1;
 
   // If we’re starting mid-block on a blank page, ensure block is erased
@@ -184,6 +192,7 @@ bool log_begin(uint16_t start_block, uint16_t end_block, bool format_if_blank) {
 
 bool log_append(const uint8_t* data, uint16_t len) {
   if (!g_haveRange || !data || len == 0) return false;
+  if (g_logFull) return false; // log is full
 
   if (payload_len + len <= max_payload_len) {
     // append to current payload buffer
@@ -194,7 +203,7 @@ bool log_append(const uint8_t* data, uint16_t len) {
 
   memcpy(&payload[payload_len], data, max_payload_len - payload_len);
 
-  // If record won’t fit in remaining bytes of this page, move to next page
+  // If record won't fit in remaining bytes of this page, move to next page
   if (g_curCol > 0) {
     // pad remainder (optional: write 0xFF — but NAND already reads as 0xFF when blank)
     g_curCol = 0;
@@ -202,7 +211,9 @@ bool log_append(const uint8_t* data, uint16_t len) {
     if (g_curPage >= NAND_PAGES_PER_BLOCK) {
       g_curPage = 0;
       g_curBlk = next_good_block(g_curBlk);
-      erase_block(g_curBlk);
+      if (g_logFull) return false; // reached end
+      // Only erase if not already blank
+      if (!page_is_blank(g_curBlk, 0)) erase_block(g_curBlk);
     }
   }
 
@@ -210,13 +221,19 @@ bool log_append(const uint8_t* data, uint16_t len) {
   bool ok = write_one_page_payload(payload, max_payload_len, g_nextSeq++);
   if (!ok) return false;
 
-  // Move to page boundary after record to keep “<= 1 program per page” rule
+  // Move to page boundary after record to keep "<= 1 program per page" rule
   // (We wrote header+payload contiguously in one page/program.)
   if (g_curCol != 0) { g_curCol = 0; g_curPage++; }
   if (g_curPage >= NAND_PAGES_PER_BLOCK) {
     g_curPage = 0;
     g_curBlk = next_good_block(g_curBlk);
-    erase_block(g_curBlk);
+    if (g_logFull) {
+      // Log is now full - clear buffer to prevent data loss
+      payload_len = 0;
+      return false;
+    }
+    // Only erase if not already blank
+    if (!page_is_blank(g_curBlk, 0)) erase_block(g_curBlk);
   }
 
   // Reset payload buffer with leftover data
@@ -229,6 +246,7 @@ bool log_append(const uint8_t* data, uint16_t len) {
 
 bool log_flush() {
   if (!g_haveRange || payload_len == 0) return true;
+  if (g_logFull) return false; // log is full
 
   // If record won't fit in remaining bytes of this page, move to next page
   if (g_curCol > 0) {
@@ -237,8 +255,9 @@ bool log_flush() {
     if (g_curPage >= NAND_PAGES_PER_BLOCK) {
       g_curPage = 0;
       g_curBlk = next_good_block(g_curBlk);
-      if (g_curBlk == 0) return false; // reached end
-      erase_block(g_curBlk);
+      if (g_logFull) return false; // reached end
+      // Only erase if not already blank
+      if (!page_is_blank(g_curBlk, 0)) erase_block(g_curBlk);
     }
   }
 
@@ -251,8 +270,13 @@ bool log_flush() {
   if (g_curPage >= NAND_PAGES_PER_BLOCK) {
     g_curPage = 0;
     g_curBlk = next_good_block(g_curBlk);
-    if (g_curBlk == 0) return false; // reached end
-    erase_block(g_curBlk);
+    if (g_logFull) {
+      // Log is now full
+      payload_len = 0;
+      return false;
+    }
+    // Only erase if not already blank
+    if (!page_is_blank(g_curBlk, 0)) erase_block(g_curBlk);
   }
 
   // Clear the buffer
@@ -302,7 +326,7 @@ bool log_iter_next(uint8_t* out, uint16_t max_out, uint16_t* out_len) {
 // optional utilities
 void log_format_range() {
   for (uint16_t b = g_startBlk; b <= g_endBlk; ++b) if (!g_bad[b]) erase_block(b);
-  g_curBlk=g_startBlk; g_curPage=0; g_curCol=0; g_nextSeq=1;
+  g_curBlk=g_startBlk; g_curPage=0; g_curCol=0; g_nextSeq=1; g_logFull=false;
 }
 uint32_t log_record_count() { return g_nextSeq ? (g_nextSeq - 1) : 0; }
 uint32_t log_next_seq() { return g_nextSeq; }

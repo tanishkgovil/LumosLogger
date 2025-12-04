@@ -276,7 +276,7 @@ void loop() {
     Serial.print(led);
     Serial.println(F(" ON"));
 
-    delay(stabTime);   // let light stabilize at the sensor
+    // delay(stabTime);   // let light stabilize at the sensor
 
     // Read AS7341 channels
     if (!as7341.readAllChannels()) {
@@ -310,7 +310,6 @@ void loop() {
     Serial.print(led);
     Serial.print(F("): "));
     Serial.print(pdData);    // already includes newline
-
 
     // When batch is full, append to NAND log
     size_t length = pdData.length();
@@ -367,9 +366,10 @@ void readback() {
   Serial.print(F("Total records read: ")); Serial.println(record_count);
 }
 
-void eraseall() {
+void erase() {
   begin();
   for (uint16_t b = 0; b < NAND_BLOCK_COUNT; ++b) {
     erase_block(b);
   }
+  Serial.println(F("All blocks erased."));
 }

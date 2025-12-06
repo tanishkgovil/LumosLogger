@@ -8,6 +8,19 @@
 #include "nand_driver.h"
 #include "nand_log.h"
 
+// Set to 0 to disable all Serial output (saves battery)
+#define DEBUG_SERIAL 0
+
+#if DEBUG_SERIAL
+  #define DEBUG_PRINT(x) Serial.print(x)
+  #define DEBUG_PRINTLN(x) Serial.println(x)
+  #define DEBUG_PRINT_HEX(x) Serial.print(x, HEX)
+#else
+  #define DEBUG_PRINT(x)
+  #define DEBUG_PRINTLN(x)
+  #define DEBUG_PRINT_HEX(x)
+#endif
+
 #define NUM_TLC5947  1
 #define DATA_PIN     A3      // Data pin for LED driver
 #define CLOCK_PIN    D2      // Clock pin for LED driver
@@ -69,6 +82,7 @@ String combineData(int led) {
 // ================== SETUP ==================
 
 void setup() {
+#if DEBUG_SERIAL
   Serial.begin(115200);
   uint32_t t0 = millis();
 
@@ -76,12 +90,13 @@ void setup() {
   while (!Serial && (millis() - t0 < 3000)) {
     delay(10);
   }
+#endif
 
-  Serial.println(F("LED 0–17 + AS7341 + CONTINUOUS NAND logging"));
+  DEBUG_PRINTLN(F("LED 0–17 + AS7341 + CONTINUOUS NAND logging"));
 
   // --- NAND low-level init ---
   if (!begin()) {
-    Serial.println(F("NAND begin() failed"));
+    DEBUG_PRINTLN(F("NAND begin() failed"));
     while (1) {
       delay(1000);
     }
@@ -89,53 +104,55 @@ void setup() {
 
   uint8_t mfg = 0, dev = 0;
   if (read_ID(mfg, dev)) {
-    Serial.print(F("NAND ID: MFG=0x")); Serial.print(mfg, HEX);
-    Serial.print(F(" DEV=0x"));         Serial.println(dev, HEX);
+    DEBUG_PRINT(F("NAND ID: MFG=0x")); DEBUG_PRINT_HEX(mfg);
+    DEBUG_PRINT(F(" DEV=0x"));         DEBUG_PRINTLN(dev);
   } else {
-    Serial.println(F("read_ID failed"));
+    DEBUG_PRINTLN(F("read_ID failed"));
   }
 
   uint8_t sr = get_status();
-  Serial.print(F("Initial NAND status: "));
-  print_status(sr);
+  DEBUG_PRINT(F("Initial NAND status: "));
+  #if DEBUG_SERIAL
+    print_status(sr);
+  #endif
 
   // NOTE: format_if_blank = true will erase this region at startup.
   if (!log_begin(LOG_START_BLOCK, LOG_END_BLOCK, false)) {
-    Serial.println(F("log_begin failed!"));
+    DEBUG_PRINTLN(F("log_begin failed!"));
     while (1) {
       delay(1000);
     }
   }
 
-  Serial.print(F("Log initialized over blocks "));
-  Serial.print(LOG_START_BLOCK);
-  Serial.print(F(".."));
-  Serial.println(LOG_END_BLOCK);
+  DEBUG_PRINT(F("Log initialized over blocks "));
+  DEBUG_PRINT(LOG_START_BLOCK);
+  DEBUG_PRINT(F(".."));
+  DEBUG_PRINTLN(LOG_END_BLOCK);
 
   // --- TLC5947 init ---
   tlc.begin();
   clearAllLEDs();
-  Serial.println(F("TLC5947 initialized."));
+  DEBUG_PRINTLN(F("TLC5947 initialized."));
 
   // One quick sweep 0–17 to verify LEDs still work with NAND present
-  Serial.println(F("One-time LED sweep 0–17 (sanity check)..."));
+  DEBUG_PRINTLN(F("One-time LED sweep 0–17 (sanity check)..."));
   for (int ch = 0; ch < numLEDs; ch++) {
     clearAllLEDs();
     tlc.setPWM(ch, 4095);
     tlc.write();
 
-    Serial.print(F("TEST LED channel "));
-    Serial.print(ch);
-    Serial.println(F(" ON"));
+    DEBUG_PRINT(F("TEST LED channel "));
+    DEBUG_PRINT(ch);
+    DEBUG_PRINTLN(F(" ON"));
 
     delay(200);
   }
   clearAllLEDs();
-  Serial.println(F("LED sweep complete.\n"));
+  DEBUG_PRINTLN(F("LED sweep complete.\n"));
 
   // --- AS7341 init ---
   if (!as7341.begin()) {
-    Serial.println(F("Could not find AS7341 sensor. Check wiring!"));
+    DEBUG_PRINTLN(F("Could not find AS7341 sensor. Check wiring!"));
     while (1) {
       delay(1000);
     }
@@ -144,11 +161,11 @@ void setup() {
   as7341.setASTEP(astep);
   as7341.setGain(gain);
 
-  Serial.println(F("AS7341 initialized."));
+  DEBUG_PRINTLN(F("AS7341 initialized."));
   delay(500);
 
   readyForLoop = true;
-  Serial.println(F("Setup complete. Entering continuous logging loop.\n"));
+  DEBUG_PRINTLN(F("Setup complete. Entering continuous logging loop.\n"));
 
   startTime = millis();
 }
@@ -164,13 +181,13 @@ void loop() {
     // Turn this LED ON
     tlc.setPWM(led, intensity);
     tlc.write();
-    Serial.print(F("LED channel "));
-    Serial.print(led);
-    Serial.println(F(" ON"));
+    DEBUG_PRINT(F("LED channel "));
+    DEBUG_PRINT(led);
+    DEBUG_PRINTLN(F(" ON"));
 
     // Read AS7341 channels
     if (!as7341.readAllChannels()) {
-      Serial.println(F("Error reading all AS7341 channels!"));
+      DEBUG_PRINTLN(F("Error reading all AS7341 channels!"));
       // Turn LED off and continue
       tlc.setPWM(led, 0);
       tlc.write();
@@ -196,20 +213,20 @@ void loop() {
 
     // Build CSV line and print
     String pdData = combineData(led);
-    Serial.print(F("PD Data (LED "));
-    Serial.print(led);
-    Serial.print(F("): "));
-    Serial.println(pdData);
+    DEBUG_PRINT(F("PD Data (LED "));
+    DEBUG_PRINT(led);
+    DEBUG_PRINT(F("): "));
+    DEBUG_PRINTLN(pdData);
 
     size_t length = pdData.length();
     totalLogged += length;
     
-    Serial.print(length);
-    Serial.println(F(" bytes. Logging to NAND..."));
+    DEBUG_PRINT(length);
+    DEBUG_PRINTLN(F(" bytes. Logging to NAND..."));
 
-    Serial.print(F("Total logged so far: "));
-    Serial.print(totalLogged);
-    Serial.println(F(" bytes"));
+    DEBUG_PRINT(F("Total logged so far: "));
+    DEBUG_PRINT(totalLogged);
+    DEBUG_PRINTLN(F(" bytes"));
 
     bool ok = log_append(
       reinterpret_cast<const uint8_t*>(pdData.c_str()),
@@ -217,17 +234,17 @@ void loop() {
     );
 
     if (!ok) {
-      Serial.println(F("log_append FAILED! Stopping logging."));
+      DEBUG_PRINTLN(F("log_append FAILED! Stopping logging."));
       readyForLoop = false;
       endTime = millis();
-      Serial.print(F("Total duration (ms): "));
-      Serial.println(endTime - startTime);
+      DEBUG_PRINT(F("Total duration (ms): "));
+      DEBUG_PRINTLN(endTime - startTime);
       break;
     } else {
-      Serial.println(F("log_append OK."));
+      DEBUG_PRINTLN(F("log_append OK."));
     }
 
-    Serial.println(F("Continuing continuous logging...\n"));
+    DEBUG_PRINTLN(F("Continuing continuous logging...\n"));
   }
 }
 

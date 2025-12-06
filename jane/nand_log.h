@@ -29,11 +29,9 @@ struct __attribute__((packed)) LogHdr {
 bool log_begin(uint16_t start_block, uint16_t end_block, bool format_if_blank);
 bool log_append(const uint8_t* data, uint16_t len);
 
-// Optional: iterate forward from oldest to newest (after log_begin)
 void log_iter_reset();
 bool log_iter_next(uint8_t* out, uint16_t max_out, uint16_t* out_len);
 
-// Optional helpers
 void log_format_range();        // full erase of [start..end] (skips factory-bad)
 uint32_t log_record_count();    // best-effort count
 uint32_t log_next_seq();        // next sequence number to be written

@@ -8,7 +8,7 @@
 #include "nand_driver.h"
 #include "nand_log.h"
 
-// Set to 0 to disable all Serial output (saves battery)
+// Set to 0 to disable all Serial output, 1 to enable for debugging
 #define DEBUG_SERIAL 0
 
 #if DEBUG_SERIAL
@@ -22,41 +22,39 @@
 #endif
 
 #define NUM_TLC5947  1
-#define DATA_PIN     A3      // Data pin for LED driver
-#define CLOCK_PIN    D2      // Clock pin for LED driver
-#define LATCH_PIN    D6      // Latch pin for LED driver
+#define DATA_PIN     A3
+#define CLOCK_PIN    D2
+#define LATCH_PIN    D6
 
 // Constructor (clock, data, latch)
 Adafruit_TLC5947 tlc = Adafruit_TLC5947(NUM_TLC5947, CLOCK_PIN, DATA_PIN, LATCH_PIN);
 
-// We will use TLC channels 0..17 (inclusive)
-const int numLEDs = 18;      // LED channels 0–17
+// LED channels 0-17
+const int numLEDs = 18;
 
-// ================== LOGGING CONFIG ==================
+// Logging configuration, 0 to NAND_BLOCK_COUNT - 1
 const uint16_t LOG_START_BLOCK = 0;
 const uint16_t LOG_END_BLOCK   = NAND_BLOCK_COUNT - 1;
 
-// ================== AS7341 CONFIG ==================
+// AS7341 sensor configuration
 Adafruit_AS7341 as7341;
 as7341_gain_t gain = AS7341_GAIN_256X;
 
-int pdVisNum = 10;           // F1..F8 + NIR + CLEAR
+int pdVisNum = 10;
 int atime    = 50;
 int astep    = 499;
 
 uint16_t readings[10] = {0};
 
-// ================== LED TIMING / BRIGHTNESS ==================
-uint16_t intensity  = 4095;  // max brightness so you can see it
-int delayTime       = 5;     // small extra delay after reading
+uint16_t intensity  = 4095; // max brightness
+int delayTime       = 5;     // small extra delay after reading (optional)
 
-// ================== LOGGING / BATCHING STATE ==================
 bool readyForLoop = false;
 int totalLogged = 0;
 unsigned long startTime = 0;
 unsigned long endTime = 0;
 
-// ================== HELPERS ==================
+// --- Helpers ---
 
 void clearAllLEDs() {
   for (int ch = 0; ch < 24; ch++) {
@@ -65,7 +63,7 @@ void clearAllLEDs() {
   tlc.write();
 }
 
-// Combine one AS7341 reading into CSV: "r0,r1,...,r9;"
+// Combine sensor readings and LED index into CSV
 String combineData(int led) {
   String pddata = "";
   for (int i = 0; i < pdVisNum; i++) {
@@ -79,14 +77,15 @@ String combineData(int led) {
   return pddata + ";";
 }
 
-// ================== SETUP ==================
+// --- Setup ---
 
 void setup() {
+
+// Start Serial for debugging
 #if DEBUG_SERIAL
   Serial.begin(115200);
   uint32_t t0 = millis();
 
-  // Wait a bit for Serial (for boards with native USB)
   while (!Serial && (millis() - t0 < 3000)) {
     delay(10);
   }
@@ -94,7 +93,7 @@ void setup() {
 
   DEBUG_PRINTLN(F("LED 0–17 + AS7341 + CONTINUOUS NAND logging"));
 
-  // --- NAND low-level init ---
+  // Initialize NAND
   if (!begin()) {
     DEBUG_PRINTLN(F("NAND begin() failed"));
     while (1) {
@@ -102,6 +101,7 @@ void setup() {
     }
   }
 
+  // Read NAND ID
   uint8_t mfg = 0, dev = 0;
   if (read_ID(mfg, dev)) {
     DEBUG_PRINT(F("NAND ID: MFG=0x")); DEBUG_PRINT_HEX(mfg);
@@ -110,13 +110,14 @@ void setup() {
     DEBUG_PRINTLN(F("read_ID failed"));
   }
 
+  // Print initial status
   uint8_t sr = get_status();
   DEBUG_PRINT(F("Initial NAND status: "));
   #if DEBUG_SERIAL
     print_status(sr);
   #endif
 
-  // NOTE: format_if_blank = true will erase this region at startup.
+  // Initialize logging (without formatting)
   if (!log_begin(LOG_START_BLOCK, LOG_END_BLOCK, false)) {
     DEBUG_PRINTLN(F("log_begin failed!"));
     while (1) {
@@ -129,12 +130,12 @@ void setup() {
   DEBUG_PRINT(F(".."));
   DEBUG_PRINTLN(LOG_END_BLOCK);
 
-  // --- TLC5947 init ---
+  // Initialize LED driver
   tlc.begin();
   clearAllLEDs();
   DEBUG_PRINTLN(F("TLC5947 initialized."));
 
-  // One quick sweep 0–17 to verify LEDs still work with NAND present
+  // Test LED sweep
   DEBUG_PRINTLN(F("One-time LED sweep 0–17 (sanity check)..."));
   for (int ch = 0; ch < numLEDs; ch++) {
     clearAllLEDs();
@@ -150,7 +151,7 @@ void setup() {
   clearAllLEDs();
   DEBUG_PRINTLN(F("LED sweep complete.\n"));
 
-  // --- AS7341 init ---
+  // Initialize AS7341 sensor
   if (!as7341.begin()) {
     DEBUG_PRINTLN(F("Could not find AS7341 sensor. Check wiring!"));
     while (1) {
@@ -175,20 +176,19 @@ void setup() {
 void loop() {
   if (!readyForLoop) return;
 
-  // Sweep LED channels 0..17 continuously
+  // Sweep LED channels
   for (int led = 0; led < numLEDs; led++) {
 
-    // Turn this LED ON
+    // Turn LED on
     tlc.setPWM(led, intensity);
     tlc.write();
     DEBUG_PRINT(F("LED channel "));
     DEBUG_PRINT(led);
     DEBUG_PRINTLN(F(" ON"));
 
-    // Read AS7341 channels
+    // Read all PD channels
     if (!as7341.readAllChannels()) {
       DEBUG_PRINTLN(F("Error reading all AS7341 channels!"));
-      // Turn LED off and continue
       tlc.setPWM(led, 0);
       tlc.write();
       continue;
@@ -211,7 +211,7 @@ void loop() {
     tlc.setPWM(led, 0);
     tlc.write();
 
-    // Build CSV line and print
+    // Convert to CSV line
     String pdData = combineData(led);
     DEBUG_PRINT(F("PD Data (LED "));
     DEBUG_PRINT(led);
@@ -228,6 +228,7 @@ void loop() {
     DEBUG_PRINT(totalLogged);
     DEBUG_PRINTLN(F(" bytes"));
 
+    // Append to log
     bool ok = log_append(
       reinterpret_cast<const uint8_t*>(pdData.c_str()),
       static_cast<uint16_t>(length)
@@ -249,15 +250,16 @@ void loop() {
 }
 
 void readback() {
+
+  // Begin Serial for output
   Serial.begin(115200);
   uint32_t t0 = millis();
   while (!Serial && (millis() - t0 < 3000)) { delay(10); }
 
   begin();
   log_begin(LOG_START_BLOCK, LOG_END_BLOCK, false);
-  // format of log data (example line): 65535,65535,65535,65535,65535,65535,65535,65535,65535,65535,4095,16;
 
-  // read back the log entries
+  // Read back the log entries
   log_iter_reset();
   const uint16_t max_record_size = NAND_MAIN_BYTES - sizeof(LogHdr);
   uint8_t* buf2 = new uint8_t[max_record_size];
@@ -277,6 +279,7 @@ void readback() {
 }
 
 void erase() {
+  // Erase all blocks
   begin();
   for (uint16_t b = 0; b < NAND_BLOCK_COUNT; ++b) {
     erase_block(b);

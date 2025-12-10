@@ -1,13 +1,13 @@
 #include "nand_log.h"
 
 // Internal pointers/state
-static uint16_t g_startBlk, g_endBlk;         // Inclusive range for log
-static uint16_t g_curBlk;                      // Write cursor
+static uint16_t g_startBlk, g_endBlk;
+static uint16_t g_curBlk;
 static uint8_t  g_curPage;
 static uint16_t g_curCol;
 static uint32_t g_nextSeq;
 static bool     g_haveRange = false;
-static bool     g_logFull = false;             // True when log is full
+static bool     g_logFull = false; // True when log is full
 
 // True means the block is bad (factory-marked)
 static bool g_bad[NAND_BLOCK_COUNT];

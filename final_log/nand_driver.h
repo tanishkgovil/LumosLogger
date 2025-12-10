@@ -2,38 +2,30 @@
 #define NAND_DRIVER_H
 
 #include <stdint.h>
-#include <Arduino.h> // Include Arduino here for types like uint8_t
+#include <Arduino.h>
 
-// Define the address struct ONCE here.
+// Address structure
 struct nand_address {
     unsigned int column : 13;
     unsigned int page   : 6;
     unsigned int block  : 11;
-    unsigned int        : 2; //2
+    unsigned int        : 2; // padding
 };
-
-// struct nand_address {
-//   uint16_t column;
-//   uint8_t page;
-//   uint16_t block;
-// };
 
 extern nand_address flashAddr;
 
 // --- Function Declarations ---
-bool begin();
-// void send_command(uint8_t command);
-void reset_chip();
-bool read_ID(uint8_t &mfg, uint8_t &dev);
-uint8_t get_status();
-int write_bytes(const uint8_t* data, uint16_t length);
-void send_command(uint8_t command);
-void print_status(uint8_t sr);
-void unlock_all_blocks();
-bool erase_block(uint16_t block);
-bool read_bytes(uint8_t* out, uint16_t length);
-// bool readPage(uint16_t block, uint8_t page, uint8_t* buffer);
-// int find_end_of_data();
+
+bool begin(); // Initialize NAND driver
+void reset_chip(); // Reset the NAND chip
+bool read_ID(uint8_t &mfg, uint8_t &dev); // Read manufacturer and device ID
+uint8_t get_status(); // Get status register
+int write_bytes(const uint8_t* data, uint16_t length); // Write bytes to NAND
+void send_command(uint8_t command); // Send command to NAND
+void print_status(uint8_t sr); // Print status register details
+void unlock_all_blocks(); // Unlock all blocks
+bool erase_block(uint16_t block); // Erase a block
+bool read_bytes(uint8_t* out, uint16_t length); // Read bytes from NAND
 
 #endif
 

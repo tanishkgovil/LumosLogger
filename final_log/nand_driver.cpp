@@ -177,23 +177,24 @@ int write_bytes(const uint8_t* data, uint16_t length) {
     length = (uint16_t) max_from_col;
   }
   
-  // 1. Write enable
+  // Enable write
   SPI.beginTransaction(nandSpi);
   send_command(WRITE_ENABLE);
   SPI.endTransaction();
 
-  // 2. Program Load
+  // Program load
   program_load(col, length, data);
 
-  // 3. Program execute
+  // Program execute
   program_execute(row);
 
-  // 4. Get Feature until OIP=0, then check P_Fail
+  // Get Feature until OIP=0, then check P_Fail
   if (!wait_ready(20)) {
     Serial.println(F("[PROGRAM] Timeout"));
     return -1;
   }
 
+  // Check status register
   uint8_t sr = get_status();
   if (sr & 0x08) {
     Serial.println(F("[PROGRAM] Failed (P_Fail=1). Is the block locked?"));
@@ -217,7 +218,7 @@ bool read_bytes(uint8_t *out, uint16_t length) {
     length = (uint16_t) max_from_col;
   }
 
-  // 1. Page read
+  // Page read
   SPI.beginTransaction(nandSpi);
   csLow();
   SPI.transfer(PAGE_READ);
@@ -229,7 +230,7 @@ bool read_bytes(uint8_t *out, uint16_t length) {
 
   if (!wait_ready(20)) return false;
 
-  // 2. Read from cache x1
+  // Read from cache
   SPI.beginTransaction(nandSpi);
   csLow();
   SPI.transfer(READ_FROM_CACHE_1);

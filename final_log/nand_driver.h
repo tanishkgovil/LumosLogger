@@ -28,4 +28,3 @@ bool erase_block(uint16_t block); // Erase a block
 bool read_bytes(uint8_t* out, uint16_t length); // Read bytes from NAND
 
 #endif
-

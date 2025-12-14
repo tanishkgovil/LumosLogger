@@ -1,41 +1,85 @@
-# Prerequisites
+# Arduino build artifacts
+*.o
+*.a
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
 *.d
+*.obj
 
-# Compiled Object files
+# Compiled libraries
 *.slo
 *.lo
-*.o
-*.obj
+*.so
+*.dylib
+*.dll
+*.lai
+*.la
+*.lib
 
 # Precompiled Headers
 *.gch
 *.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
 
 # Executables
 *.exe
 *.out
 *.app
 
-# debug information files
+# Arduino IDE
+.vscode/
+.vs/
+*.code-workspace
+
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Build directories
+build/
+bin/
+lib/
+.build/
+
+# Temporary files
+*~
+*.swp
+*.swo
+*.tmp
+*.bak
+*.old
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Python (if used for testing/tools)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/
+
+# Logs
+*.log
+
+# IDE
+.idea/
+*.sublime-*
+*.iml
+
+# Debug files
+*.dmp
+*.pdb
+*.ilk
 *.dwo

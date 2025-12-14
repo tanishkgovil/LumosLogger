@@ -1,5 +1,9 @@
 # Lumos NAND Logger
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![Arduino](https://img.shields.io/badge/Platform-Arduino-00979D?logo=arduino&logoColor=white)
+![C++](https://img.shields.io/badge/Language-C%2B%2B-blue?logo=cplusplus)
+
 A high-performance NAND flash logging library for Arduino and embedded systems. This library provides a robust, sequential logging system for writing structured data to SPI NAND flash memory with automatic bad block management and data integrity checking.
 
 ## Features

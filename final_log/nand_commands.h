@@ -23,14 +23,6 @@
 #define PROGRAM_LOAD_RANDOM_DATA_X4 0x34 
 #define PROTECT 0x2C
 
-// //from chat testing out
-// #define STATUS_OIP_BIT      0x01  // Operation In Progress
-// #define STATUS_WEL_BIT      0x02  // Write Enable Latch
-// #define STATUS_E_FAIL_BIT   0x04  // Erase Fail
-// #define STATUS_P_FAIL_BIT   0x08  // Program Fail
-// #define STATUS_ECC_MASK     0x70  // ECC Status bits [6:4]
-// #define STATUS_CRBSY_BIT    0x80  // Cache Read Busy
-
 // // Feature addresses (from datasheet)
 #define FEATURE_ADDR_STATUS     0xC0
 // #define FEATURE_ADDR_CONFIG     0xB0
